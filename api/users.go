@@ -203,24 +203,59 @@ func CreateToken(userId int) (string, error) {
 	return tokenstring, nil
 }
 
+// func AuthorizationCheck(c *gin.Context) {
+// 	token, err := jwt.Parse(c.GetHeader("Authorization"), func(token *jwt.Token) (interface{}, error) {
+// 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+// 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+// 		}
+// 		return TokenSecret, nil
+// 	})
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		return
+// 	}
+// 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+// 		c.Set("user_claims", claims)
+// 		c.Next()
+// 	} else {
+// 		c.JSON(401, "Unauthorized")
+// 	}
+
+// }
+
 func AuthorizationCheck(c *gin.Context) {
-	token, err := jwt.Parse(c.GetHeader("Authorization"), func(token *jwt.Token) (interface{}, error) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.AbortWithStatusJSON(401, gin.H{"error": "Authorization header missing"})
+		return
+	}
+
+	const prefix = "Bearer "
+	if len(authHeader) <= len(prefix) || authHeader[:len(prefix)] != prefix {
+		c.AbortWithStatusJSON(401, gin.H{"error": "Authorization header format must be: Bearer {token}"})
+		return
+	}
+
+	tokenString := authHeader[len(prefix):]
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return TokenSecret, nil
+		return TokenSecret, nil // Ovdje koristiš svoju tajnu (secret)
 	})
-	if err != nil {
-		fmt.Println(err)
+
+	if err != nil || !token.Valid {
+		c.AbortWithStatusJSON(401, gin.H{"error": "Invalid or expired token"})
 		return
 	}
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
 		c.Set("user_claims", claims)
 		c.Next()
 	} else {
-		c.JSON(401, "Unauthorized")
+		c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
 	}
-
 }
 
 func GetUserIdFromUserClaims(c *gin.Context) (int, error) {
